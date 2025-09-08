@@ -89,3 +89,14 @@ export const removeCartItem = async (
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+export const deleteCartItem = async (req: Request, res: Response) => {
+  try {
+    const deletedItem = await CartItem.findByIdAndDelete(req.params.id);
+    if (!deletedItem) {
+      return res.status(404).json({ message: "Cart item not found" });
+    }
+    res.status(200).json({ message: "Cart item deleted successfully" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
