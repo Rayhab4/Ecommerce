@@ -23,7 +23,7 @@ const OrderSchema: Schema = new Schema<IOrder>(
     items: { type: [OrderItemSchema], required: true },
     totalPrice: { type: Number, required: true },
   },
-  { timestamps: true }   // automatically adds createdAt and updatedAt
+  { timestamps: true }
 );
 
 export default mongoose.model<IOrder>("Order", OrderSchema);
