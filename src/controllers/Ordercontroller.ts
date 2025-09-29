@@ -1,72 +1,117 @@
 import express,{ Request, Response } from "express";
 import CartItem from "../Models/CartItemModel";
-import Product from "../Models/ProductModel";
 import Order from "../Models/OrderModel";
-import { ApiResponse } from "../types";
+import { IProduct } from "../Models/ProductModel";
 
-export const placeOrder = async (req: Request, res: Response) => {
+import mongoose from 'mongoose';
+
+export interface AuthRequest extends Request {
+  user?: {
+    _id: string;
+  };
+}
+// 🛒 Place an Order from a Cart Item ID
+export const placeOrder = async (req: AuthRequest, res: Response): Promise<Response> => {
   try {
-    const cartItems = await CartItem.find();
-    if (!cartItems.length) {
-      return res.status(400).json({ success: false, data: null, message: "Cart is empty" });
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "User not authenticated" });
     }
 
-    const orderItems = [] as any[];
-    let total = 0;
+    const cartItemsData = await CartItem.find({ userId }).populate("productId");
+    if (!cartItemsData || cartItemsData.length === 0) {
+      return res.status(400).json({ success: false, message: "No cart items found for this user" });
+    }
 
-    for (const ci of cartItems) {
-      const product = await Product.findById(ci.productId);
+    let totalPrice = 0;
+    const orderItems: {
+      productId: mongoose.Types.ObjectId;
+      quantity: number;
+      priceAtPurchase: number;
+    }[] = [];
+
+    for (const cartItem of cartItemsData) {
+      const product = cartItem.productId as unknown as IProduct;
       if (!product) {
-        return res.status(400).json({ success: false, data: null, message: `Product ${ci.productId} not found` });
+        return res.status(404).json({ success: false, message: `Product not found for cart item ${cartItem._id}` });
       }
       const priceAtPurchase = product.price;
-      const lineTotal = priceAtPurchase * ci.quantity;
-      total += lineTotal;
-      orderItems.push({ productId: product._id, quantity: ci.quantity, priceAtPurchase });
+      totalPrice += priceAtPurchase * cartItem.quantity;
+
+      orderItems.push({
+        productId: product as unknown as mongoose.Types.ObjectId,
+        quantity: cartItem.quantity,
+        priceAtPurchase,
+      });
     }
 
-    const order = await Order.create({ items: orderItems, totalPrice: total });
+    const createdOrder = await Order.create({
+      userId,
+      items: orderItems,
+      totalPrice,
+      status: "pending",
+      createdAt: new Date(),
+    });
 
-    // clear cart after placing order
-    await CartItem.deleteMany({});
+    // Remove cart items after order creation
+    const cartItemIds = cartItemsData.map((cartItem) => cartItem._id);
+    await CartItem.deleteMany({ _id: { $in: cartItemIds } });
 
-    return res.status(201).json({ success: true, data: order });
+    return res.status(201).json({
+      success: true,
+      message: "Order placed successfully",
+      data: createdOrder,
+    });
   } catch (err: any) {
-    return res.status(500).json({ success: false, data: null, message: err.message });
+    console.error("Error during order creation:", err);
+    return res.status(500).json({ success: false, message: err?.message || "Internal server error" });
   }
 };
 
-export const getAllOrders = async (req: Request, res: Response) => {
+// 📦 Get All Orders for the Logged-In User
+export const getAllOrders = async (req: AuthRequest, res: Response) => {
   try {
-    const orders = await Order.find().populate("items.productId");
+    const userId = req.user?._id;
+
+    const orders = await Order.find({ userId }).populate("items.productId");
     return res.status(200).json({ success: true, data: orders });
   } catch (err: any) {
-    return res.status(500).json({ success: false, data: null, message: err.message });
+    return res.status(500).json({ success: false, message: err.message, data: null });
   }
 };
 
-export const getOrderById = async (req: Request, res: Response) => {
+// 📦 Get a Single Order by ID (only if it belongs to the user)
+export const getOrderById = async (req: AuthRequest, res: Response) => {
   try {
-    const id = req.params.id;
-    const order = await Order.findById(id).populate("items.productId");
+    const userId = req.user?._id;
+    const orderId = req.params.id;
+
+    const order = await Order.findOne({ _id: orderId, userId }).populate("items.productId");
+
     if (!order) {
-      return res.status(404).json({ success: false, data: null, message: "Order not found" });
+      return res.status(404).json({ success: false, message: "Order not found", data: null });
     }
+
     return res.status(200).json({ success: true, data: order });
   } catch (err: any) {
-    return res.status(500).json({ success: false, data: null, message: err.message });
+    return res.status(500).json({ success: false, message: err.message, data: null });
   }
 };
 
-export const cancelOrder = async (req: Request, res: Response) => {
+// ❌ Cancel an Order (only if it belongs to the user)
+export const cancelOrder = async (req: AuthRequest, res: Response) => {
   try {
-    const id = req.params.id;
-    const order = await Order.findByIdAndDelete(id);
+    const userId = req.user?._id;
+    const orderId = req.params.id;
+
+    const order = await Order.findOneAndDelete({ _id: orderId, userId });
+
     if (!order) {
-      return res.status(404).json({ success: false, data: null, message: "Order not found" });
+      return res.status(404).json({ success: false, message: "Order not found", data: null });
     }
-    return res.status(200).json({ success: true, data: order, message: "Canceled" });
+
+    return res.status(200).json({ success: true, message: "Order canceled", data: order });
   } catch (err: any) {
-    return res.status(500).json({ success: false, data: null, message: err.message });
+    return res.status(500).json({ success: false, message: err.message, data: null });
   }
 };

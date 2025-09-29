@@ -1,11 +1,13 @@
 import express, { Router } from "express";
 import { placeOrder, getAllOrders, getOrderById, cancelOrder } from "../controllers/Ordercontroller";
+import { authMiddleware } from '../middlewares/Authmiddlewares';
+
 
 const router = Router();
 
-router.post("/", placeOrder);        // POST /orders
-router.get("/", getAllOrders);       // GET /orders
-router.get("/:id", getOrderById);    // GET /orders/:id
-router.delete("/:id", cancelOrder);  // DELETE /orders/:id
+router.post("/", authMiddleware, placeOrder);      
+router.get("/", authMiddleware, getAllOrders);     
+router.get("/:id", authMiddleware, getOrderById);  
+router.delete("/:id", authMiddleware, cancelOrder);
 
 export default router;

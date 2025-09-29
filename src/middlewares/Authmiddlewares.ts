@@ -1,52 +1,69 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import UserModel  from '../Models/UserModel'; 
+import UserModel from '../Models/UserModel';
+import dotenv from 'dotenv';
+dotenv.config();
 
 
-const JWT_SECRET = process.env.JWT_SECRET || 'ibanga';
+// Store your secret safely (e.g., in .env)
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is not defined in your environment variables');
+}
 
-// Extend Express Request interface to include user property
+// Extend Express's Request interface globally
 declare global {
   namespace Express {
     interface Request {
-      user?: any;
+      user?: {
+        _id: string;
+        email?: string;
+        name?: string;
+        // You can include other user fields here
+      };
     }
   }
 }
 
-// Middleware to protect routes
+// Authentication Middleware
 export const authMiddleware = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const authHeader = req.header('Authorization');
-  if (!authHeader) {
-    res.status(401).json({ message: 'Authentication token is missing' });
-    return;
-  }
-
-  // Extract token from "Bearer TOKEN" format
-  const token = authHeader.replace('Bearer ', '');
-  if (!token) {
-    res.status(401).json({ message: 'Authentication token is missing' });
-    return;
-  }
-
   try {
-    // Verify the token using JWT secret
-    const decoded = jwt.verify(token, JWT_SECRET) as { _id: string };
+    const authHeader = req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ message: 'Authentication token is missing or invalid format' });
+      return;
+    }
 
-    // Fetch the user and attach to req.user
-    const user = await UserModel.findById(decoded._id);
+    const token = authHeader.split(' ')[1]; // "Bearer TOKEN"
+
+    const decoded = jwt.verify(token, JWT_SECRET) as { _id: string };
+    const user = await UserModel.findById(decoded._id).select('_id email name'); // or select more if needed
+
     if (!user) {
       res.status(401).json({ message: 'User not found' });
       return;
     }
 
-    req.user = user; // Attach the user to the request
-    next(); // Proceed to the next middleware or route handler
-  } catch (error) {
-    res.status(401).json({ message: 'Invalid or expired token' });
+    // Attach minimal user info to request (avoid attaching full doc)
+    req.user = {
+      _id: user._id.toString(),
+      email: user.email,
+      name: user.name,
+    };
+
+    next();
   }
+    catch (error: any) {
+      console.error("Auth error:", error.message); 
+      if (error.name === 'TokenExpiredError') {
+        res.status(401).json({ message: 'Token has expired' });
+      } else {
+        res.status(401).json({ message: 'Invalid or expired token' });
+      }
+    }
+
 };

@@ -1,102 +1,127 @@
 import express,{ Request, Response } from "express";
 import CartItem from "../Models/CartItemModel";
 import Product from "../Models/ProductModel";
+import mongoose from "mongoose";
 
-export interface CartItemInput {
+interface CartItemInput {
   productId: string;
   quantity: number;
 }
-export const addToCart = async (
-  req: Request<{}, {}, CartItemInput>,
-  res: Response
-) => {
-  try {
-    const { productId, quantity } = req.body;
+export interface AuthRequest extends Request {
+  user?: {
+    _id: string;
+  };
+}
 
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ success: false, message: "Product not found" });
+const isValidObjectId = (id: string): boolean => mongoose.Types.ObjectId.isValid(id);
+
+// ➕ Add to Cart
+export const addToCart = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?._id;
+    const { items } = req.body; // Now this will handle both single and multiple items
+
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+    
+    // If items is not an array, treat it as a single item
+    const cartItems = Array.isArray(items) ? items : [items];
+
+    const cartItemsToAdd = [];
+
+    for (let item of cartItems) {
+      const { productId, quantity }: CartItemInput = item;
+
+      if (!isValidObjectId(productId)) {
+        return res.status(400).json({ success: false, message: `Invalid productId: ${productId}` });
+      }
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        return res.status(400).json({ success: false, message: "Quantity must be a positive integer" });
+      }
+
+      const product = await Product.findById(productId);
+      if (!product) return res.status(404).json({ success: false, message: `Product ${productId} not found` });
+
+      // Check if item already exists in user's cart
+      const existingItem = await CartItem.findOne({ userId, productId });
+
+      if (existingItem) {
+        existingItem.quantity += quantity;
+        await existingItem.save();
+        cartItemsToAdd.push(existingItem);
+      } else {
+        const newCartItem = new CartItem({ userId, productId, quantity });
+        await newCartItem.save();
+        cartItemsToAdd.push(newCartItem);
+      }
     }
 
-    const cartItem = new CartItem({ productId, quantity });
-    await cartItem.save();
-
-    return res.status(201).json({
-      success: true,
-      data: cartItem,
-      message: "Item added to cart",
-    });
+    return res.status(200).json({ success: true, message: "Items added to cart", data: cartItemsToAdd });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-export const getCartItems = async (_req: Request, res: Response) => {
+
+// 📥 Get Cart Items for Authenticated User
+export const getCartItems = async (req: AuthRequest, res: Response) => {
   try {
-    const items = await CartItem.find().populate("productId");
+    const userId = req.user?._id;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const items = await CartItem.find({ userId }).populate("productId");
     return res.status(200).json({ success: true, data: items });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
+// ✏️ Update Quantity of a Cart Item
 export const updateCartItem = async (
-  req: Request<{ productId: string }, {}, { quantity: number }>,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
+    const userId = req.user?._id;
     const { productId } = req.params;
     const { quantity } = req.body;
 
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+    if (!isValidObjectId(productId)) return res.status(400).json({ success: false, message: "Invalid productId" });
+    if (!Number.isInteger(quantity) || quantity <= 0) return res.status(400).json({ success: false, message: "Quantity must be a positive integer" });
+
     const item = await CartItem.findOneAndUpdate(
-      { productId },
+      { userId, productId },
       { quantity },
       { new: true }
     );
 
-    if (!item) {
-      return res.status(404).json({ success: false, message: "Cart item not found" });
-    }
+    if (!item) return res.status(404).json({ success: false, message: "Cart item not found" });
 
-    return res.status(200).json({
-      success: true,
-      data: item,
-      message: "Cart item updated",
-    });
+    return res.status(200).json({ success: true, message: "Cart item updated", data: item });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
+// ❌ Remove Item from Cart
 export const removeCartItem = async (
-  req: Request<{ productId: string }>,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
-    const { productId } = req.params;
+    const userId = req.user?._id;
+    const { cartId } = req.params;
 
-    const item = await CartItem.findOneAndDelete({ productId });
-    if (!item) {
-      return res.status(404).json({ success: false, message: "Cart item not found" });
-    }
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+    if (!isValidObjectId(cartId)) return res.status(400).json({ success: false, message: "Invalid cartId" });
 
-    return res.status(200).json({
-      success: true,
-      data: item,
-      message: "Cart item removed",
-    });
+    // Fix: Use _id instead of cartId
+    const deletedItem = await CartItem.findOneAndDelete({ userId, _id: cartId });
+
+    if (!deletedItem) return res.status(404).json({ success: false, message: "Cart item not found" });
+
+    return res.status(200).json({ success: true, message: "Cart item removed", data: deletedItem });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
-  }
-};
-export const deleteCartItem = async (req: Request, res: Response) => {
-  try {
-    const deletedItem = await CartItem.findByIdAndDelete(req.params.id);
-    if (!deletedItem) {
-      return res.status(404).json({ message: "Cart item not found" });
-    }
-    res.status(200).json({ message: "Cart item deleted successfully" });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
   }
 };

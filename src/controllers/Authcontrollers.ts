@@ -7,12 +7,13 @@ export interface User {
   name: string;
   email: string;
   password: string;
+  role: string;
 }
 
 
 export const loginUser = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { email, password }: { email: string, password: string } = req.body;
+    const { email, password }: { email: string, password: string, role: string } = req.body;
 
     const user = await UserModel.findOne({ email });
 
@@ -26,11 +27,12 @@ export const loginUser = async (req: Request, res: Response): Promise<Response> 
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
-    const token = generateToken(user._id.toString()); // Generate token with user ID
+    const token = generateToken(user._id.toString()); 
 
     return res.status(200).json({
       message: 'Login successful',
-      token, // Send the token in response
+      role: user.role,
+      token, 
     });
   } catch (error) {
     return res.status(500).json({ message: 'Login failed', error });
@@ -39,7 +41,7 @@ export const loginUser = async (req: Request, res: Response): Promise<Response> 
 
 export const registerUser = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { name, email, password }: { name: string, email: string, password: string } = req.body;
+    const { name, email, password, role }: { name: string, email: string, password: string, role: string } = req.body;
 
     // Check if user already exists
     const existingUser = await UserModel.findOne({ email });
@@ -53,6 +55,7 @@ export const registerUser = async (req: Request, res: Response): Promise<Respons
       name,
       email,
       password: hashedPassword,
+      role,
     });
 
     await newUser.save(); // Save the new user to the database
@@ -61,6 +64,7 @@ export const registerUser = async (req: Request, res: Response): Promise<Respons
 
     return res.status(201).json({
       message: 'Registration successful',
+      role: newUser.role,
       token, // Send the token in response
     });
   } catch (error) {

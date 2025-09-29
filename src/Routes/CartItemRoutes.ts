@@ -3,14 +3,15 @@ import {
   addToCart,
   getCartItems,
   updateCartItem,
-  deleteCartItem,
+  removeCartItem,
 } from "../controllers/CartItemcontroller";
+import { authMiddleware } from '../middlewares/Authmiddlewares';
 
 const router = express.Router();
 
-router.post('/', addToCart);
-router.get('/', getCartItems);
-router.put('/:productId', updateCartItem);
-router.delete('/:productId', deleteCartItem);
+router.post('/', authMiddleware, addToCart);
+router.get('/', authMiddleware, getCartItems);
+router.put('/:productId', authMiddleware, updateCartItem);
+router.delete('/:cartId', authMiddleware, removeCartItem);
 
 export default router;

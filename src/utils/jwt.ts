@@ -8,9 +8,9 @@ const { JWT_SECRET } = process.env;
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET is not defined in your environment variables.');
 }
-export const generateToken = (userId: string): string => {
+export const generateToken = (_id: string): string => {
   return jwt.sign(
-    { userId },
+    { _id },
     JWT_SECRET,
     { expiresIn: '1h' }
   );
@@ -18,7 +18,7 @@ export const generateToken = (userId: string): string => {
 
 export const verifyToken = (token: string): any => {
   try {
-    return jwt.verify(token, JWT_SECRET as string); // Decode the token
+    return jwt.verify(token, JWT_SECRET as string); 
   } catch (error) {
     return null;
   }
