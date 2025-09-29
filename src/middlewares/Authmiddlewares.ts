@@ -5,13 +5,13 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 
-// Store your secret safely (e.g., in .env)
+
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET is not defined in your environment variables');
 }
 
-// Extend Express's Request interface globally
+
 declare global {
   namespace Express {
     interface Request {
@@ -19,13 +19,13 @@ declare global {
         _id: string;
         email?: string;
         name?: string;
-        // You can include other user fields here
+       
       };
     }
   }
 }
 
-// Authentication Middleware
+
 export const authMiddleware = async (
   req: Request,
   res: Response,
