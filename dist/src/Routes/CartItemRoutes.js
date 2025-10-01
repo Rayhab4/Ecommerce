@@ -5,9 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const CartItemcontroller_1 = require("../controllers/CartItemcontroller");
+const Authmiddlewares_1 = require("../middlewares/Authmiddlewares");
 const router = express_1.default.Router();
-router.post('/', CartItemcontroller_1.addToCart);
-router.get('/', CartItemcontroller_1.getCartItems);
-router.put('/:productId', CartItemcontroller_1.updateCartItem);
-router.delete('/:productId', CartItemcontroller_1.deleteCartItem);
+router.post('/', Authmiddlewares_1.authMiddleware, CartItemcontroller_1.addToCart);
+router.get('/', Authmiddlewares_1.authMiddleware, CartItemcontroller_1.getCartItems);
+router.put('/:productId', Authmiddlewares_1.authMiddleware, CartItemcontroller_1.updateCartItem);
+router.delete('/:cartId', Authmiddlewares_1.authMiddleware, CartItemcontroller_1.removeCartItem);
 exports.default = router;

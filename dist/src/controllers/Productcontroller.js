@@ -4,17 +4,38 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteProduct = exports.updateProduct = exports.getProductById = exports.getAllProducts = exports.createProduct = void 0;
+const cloudinaryConfig_1 = __importDefault(require("../cloudinaryConfig"));
 const ProductModel_1 = __importDefault(require("../Models/ProductModel"));
+const multer_1 = __importDefault(require("multer"));
+const storage = multer_1.default.memoryStorage();
+const upload = (0, multer_1.default)({ storage: storage });
 const createProduct = async (req, res) => {
     try {
-        const { name, description, price, imageUrl, category } = req.body;
+        const { name, description, price, category } = req.body;
+        const image = req.file;
         if (!name || !description || !price) {
             return res.status(400).json({
                 success: false,
                 message: 'Name, description, and price are required',
             });
         }
-        const product = await ProductModel_1.default.create({ name, description, price, imageUrl, category });
+        let imageUrl = null;
+        if (image) {
+            const cloudinaryResponse = await cloudinaryConfig_1.default.uploader.upload_stream({ resource_type: 'auto' }, (error, result) => {
+                if (error) {
+                    throw new Error('Image upload failed');
+                }
+                imageUrl = result?.secure_url;
+            });
+            image.stream.pipe(cloudinaryResponse);
+        }
+        const product = await ProductModel_1.default.create({
+            name,
+            description,
+            price,
+            imageUrl,
+            category,
+        });
         res.status(201).json({ success: true, data: product });
     }
     catch (err) {
@@ -47,7 +68,19 @@ const getProductById = async (req, res) => {
 exports.getProductById = getProductById;
 const updateProduct = async (req, res) => {
     try {
-        const updated = await ProductModel_1.default.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const { name, description, price, category } = req.body;
+        const image = req.file;
+        let imageUrl = null;
+        if (image) {
+            const cloudinaryResponse = await cloudinaryConfig_1.default.uploader.upload_stream({ resource_type: 'auto' }, (error, result) => {
+                if (error) {
+                    throw new Error('Image upload failed');
+                }
+                imageUrl = result?.secure_url;
+            });
+            image.stream.pipe(cloudinaryResponse);
+        }
+        const updated = await ProductModel_1.default.findByIdAndUpdate(req.params.id, { name, description, price, category, imageUrl }, { new: true });
         if (!updated) {
             return res.status(404).json({ success: false, message: 'Product not found' });
         }

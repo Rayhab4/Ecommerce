@@ -5,71 +5,117 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.cancelOrder = exports.getOrderById = exports.getAllOrders = exports.placeOrder = void 0;
 const CartItemModel_1 = __importDefault(require("../Models/CartItemModel"));
-const ProductModel_1 = __importDefault(require("../Models/ProductModel"));
 const OrderModel_1 = __importDefault(require("../Models/OrderModel"));
+// 🛒 Place an Order from Cart Items
 const placeOrder = async (req, res) => {
     try {
-        const cartItems = await CartItemModel_1.default.find();
-        if (!cartItems.length) {
-            return res.status(400).json({ success: false, data: null, message: "Cart is empty" });
+        const userId = req.user?._id;
+        if (!userId) {
+            return res.status(401).json({ success: false, message: "User not authenticated" });
         }
+        const cartItemsData = await CartItemModel_1.default.find({ userId }).populate("productId");
+        if (!cartItemsData || cartItemsData.length === 0) {
+            return res.status(400).json({ success: false, message: "No cart items found for this user" });
+        }
+        let totalPrice = 0;
         const orderItems = [];
-        let total = 0;
-        for (const ci of cartItems) {
-            const product = await ProductModel_1.default.findById(ci.productId);
+        for (const cartItem of cartItemsData) {
+            const product = cartItem.productId;
             if (!product) {
-                return res.status(400).json({ success: false, data: null, message: `Product ${ci.productId} not found` });
+                return res.status(404).json({ success: false, message: `Product not found for cart item ${cartItem._id}` });
             }
             const priceAtPurchase = product.price;
-            const lineTotal = priceAtPurchase * ci.quantity;
-            total += lineTotal;
-            orderItems.push({ productId: product._id, quantity: ci.quantity, priceAtPurchase });
+            totalPrice += priceAtPurchase * cartItem.quantity;
+            orderItems.push({
+                productId: product,
+                quantity: cartItem.quantity,
+                priceAtPurchase,
+            });
         }
-        const order = await OrderModel_1.default.create({ items: orderItems, totalPrice: total });
-        // clear cart after placing order
-        await CartItemModel_1.default.deleteMany({});
-        return res.status(201).json({ success: true, data: order });
+        const createdOrder = await OrderModel_1.default.create({
+            userId,
+            items: orderItems,
+            totalPrice,
+            status: "pending",
+            createdAt: new Date(),
+        });
+        // Remove cart items after order creation
+        const cartItemIds = cartItemsData.map((cartItem) => cartItem._id);
+        await CartItemModel_1.default.deleteMany({ _id: { $in: cartItemIds } });
+        return res.status(201).json({
+            success: true,
+            message: "Order placed successfully",
+            data: createdOrder,
+        });
     }
     catch (err) {
-        return res.status(500).json({ success: false, data: null, message: err.message });
+        console.error("Error during order creation:", err);
+        return res.status(500).json({ success: false, message: err?.message || "Internal server error" });
     }
 };
 exports.placeOrder = placeOrder;
+// 📦 Get All Orders (Admin sees all, user sees own)
 const getAllOrders = async (req, res) => {
     try {
-        const orders = await OrderModel_1.default.find().populate("items.productId");
+        let orders;
+        if (req.user?.role === "admin") {
+            // Admin sees all orders
+            orders = await OrderModel_1.default.find()
+                .populate("userId", "name email")
+                .populate("items.productId", "name price");
+        }
+        else {
+            // Regular user sees only their own orders
+            orders = await OrderModel_1.default.find({ userId: req.user?._id })
+                .populate("userId", "name email")
+                .populate("items.productId", "name price");
+        }
         return res.status(200).json({ success: true, data: orders });
     }
     catch (err) {
-        return res.status(500).json({ success: false, data: null, message: err.message });
+        return res.status(500).json({ success: false, message: err.message || "Failed to fetch orders", data: null });
     }
 };
 exports.getAllOrders = getAllOrders;
+// 📦 Get a Single Order by ID (only if it belongs to the user or admin)
 const getOrderById = async (req, res) => {
     try {
-        const id = req.params.id;
-        const order = await OrderModel_1.default.findById(id).populate("items.productId");
+        const orderId = req.params.id;
+        let order;
+        if (req.user?.role === "admin") {
+            order = await OrderModel_1.default.findById(orderId).populate("items.productId", "name price").populate("userId", "name email");
+        }
+        else {
+            order = await OrderModel_1.default.findOne({ _id: orderId, userId: req.user?._id }).populate("items.productId", "name price");
+        }
         if (!order) {
-            return res.status(404).json({ success: false, data: null, message: "Order not found" });
+            return res.status(404).json({ success: false, message: "Order not found", data: null });
         }
         return res.status(200).json({ success: true, data: order });
     }
     catch (err) {
-        return res.status(500).json({ success: false, data: null, message: err.message });
+        return res.status(500).json({ success: false, message: err.message || "Failed to fetch order", data: null });
     }
 };
 exports.getOrderById = getOrderById;
+// ❌ Cancel an Order (only if it belongs to the user)
 const cancelOrder = async (req, res) => {
     try {
-        const id = req.params.id;
-        const order = await OrderModel_1.default.findByIdAndDelete(id);
-        if (!order) {
-            return res.status(404).json({ success: false, data: null, message: "Order not found" });
+        const orderId = req.params.id;
+        let order;
+        if (req.user?.role === "admin") {
+            order = await OrderModel_1.default.findByIdAndDelete(orderId);
         }
-        return res.status(200).json({ success: true, data: order, message: "Canceled" });
+        else {
+            order = await OrderModel_1.default.findOneAndDelete({ _id: orderId, userId: req.user?._id });
+        }
+        if (!order) {
+            return res.status(404).json({ success: false, message: "Order not found", data: null });
+        }
+        return res.status(200).json({ success: true, message: "Order canceled", data: order });
     }
     catch (err) {
-        return res.status(500).json({ success: false, data: null, message: err.message });
+        return res.status(500).json({ success: false, message: err.message || "Failed to cancel order", data: null });
     }
 };
 exports.cancelOrder = cancelOrder;

@@ -15,17 +15,43 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const cartItemSchema = new mongoose_1.Schema({
-    productId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Product', required: true },
-    quantity: { type: Number, required: true },
+    userId: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: "User", // Referring to the User model
+        required: true,
+        index: true, // Adding an index for faster user-based queries
+    },
+    productId: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: "Product", // Referring to the Product model
+        required: true,
+        index: true, // Adding an index for faster product-based queries
+    },
+    quantity: {
+        type: Number,
+        required: true,
+        min: [1, "Quantity must be at least 1"], // Validating quantity
+        max: [100, "Quantity cannot exceed 100"], // Optional: limit for max quantity
+    },
 }, { timestamps: true });
-exports.default = mongoose_1.default.model('CartItem', cartItemSchema);
+exports.default = mongoose_1.default.model("CartItem", cartItemSchema);
