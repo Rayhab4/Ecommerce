@@ -18,6 +18,16 @@ export const newuser = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+export const getAllUsers = async (req: Request, res: Response) => {
+  try {
+    const users = await UserModel.find();
+    res.status(200).json({ success: true, data: users });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
 // Get a user by ID
 export const getUser = async (req: Request, res: Response): Promise<void> => {
   try {
